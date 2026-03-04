@@ -1,0 +1,3 @@
+agent-data-toolkit[postgresql]
+ipykernel
+python-dotenv

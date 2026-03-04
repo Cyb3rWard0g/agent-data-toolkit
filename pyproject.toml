@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools>=82", "setuptools_scm[toml]>=9", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-data-toolkit"
+dynamic = ["version"]
+description = "Connect agents to data"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "Roberto Rodriguez", email = "9653181+Cyb3rWard0g@users.noreply.github.com" }
+]
+requires-python = ">=3.11,<3.14"
+
+dependencies = [
+    "pandas>=3.0.1",
+]
+
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+
+# Optional dependency groups
+[project.optional-dependencies]
+# Dev / CI helpers
+dev = [
+  "pytest>=9.0",
+  "pytest-asyncio>=1.0",
+  "ruff>=0.15",
+  "anyio>=4.12",
+  "build>=1.4",
+  "twine>=6.2",
+  "packaging",
+  "setuptools>=82",
+  "setuptools_scm>=9",
+  "wheel",
+]
+
+# PostgreSQL connector (self-contained)
+# Include pandas/pyarrow here so users get everything they need with one extra.
+postgresql = [
+  "psycopg[binary]>=3.3.3",
+  "psycopg_pool>=3.3.0",
+  "pyarrow>=23.0.1",
+]
+
+# Convenience bundle
+all = [
+  "agent-data-toolkit[postgresql]"
+]
+
+[project.urls]
+Homepage = "https://github.com/Cyb3rWard0g/agent-data-toolkit"
+Issues = "https://github.com/Cyb3rWard0g/agent-data-toolkit/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "node-and-date"
+write_to = "src/agent_data_toolkit/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra"
+pythonpath = ["src"]
+norecursedirs = ["repos", ".venv"]
+markers = [
+  "pg: tests that require PostgreSQL extras and a DSN",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = [".venv", ".tox", "build", "dist", "__pycache__", ".eggs", "repos", "src/agent_data_toolkit/_version.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = []
+preview = true
+
+[tool.ruff.lint.per-file-ignores]
+"src/agent_data_toolkit/_version.py" = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent_data_toolkit"]
+
+[tool.ruff.format]
+exclude = ["src/agent_data_toolkit/_version.py"]
