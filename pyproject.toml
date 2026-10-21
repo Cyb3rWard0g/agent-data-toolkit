@@ -49,9 +49,14 @@ postgresql = [
   "pyarrow>=23.0.1",
 ]
 
+azure-monitor = [
+  "azure-monitor-query>=2.0.0,<3",
+  "azure-identity>=1.26.0,<2",
+]
+
 # Convenience bundle
 all = [
-  "agent-data-toolkit[postgresql]"
+  "agent-data-toolkit[postgresql,azure-monitor]"
 ]
 
 [project.urls]
@@ -78,6 +83,7 @@ pythonpath = ["src"]
 norecursedirs = ["repos", ".venv"]
 markers = [
   "pg: tests that require PostgreSQL extras and a DSN",
+  "azure_live: tests that require explicit Azure Logs live qualification settings",
 ]
 
 [tool.ruff]

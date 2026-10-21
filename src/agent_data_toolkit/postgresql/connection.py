@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -533,7 +533,7 @@ class ConnectionManager:
     # ────────────────── public API ──────────────────
 
     @contextmanager
-    def connection(self) -> Iterator[Any]:
+    def connection(self) -> Generator[Any, None, None]:
         """
         Context manager yielding a connection (new or from pool).
 

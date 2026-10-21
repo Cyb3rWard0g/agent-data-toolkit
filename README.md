@@ -9,6 +9,7 @@ An open source toolkit that provides modular connectors for AI agents to interac
 | Connector    | Status     | Extras name    | Notes                                      |
 |--------------|-----------|----------------|--------------------------------------------|
 | PostgreSQL   | ✅ Ready   | `postgresql`   | Supports queries, schema introspection, DataFrame helpers |
+| Azure Monitor Logs / Sentinel | Ready | `azure-monitor` | Workspace KQL queries, retained source response, explicit partial-result handling, DataFrames |
 | Elasticsearch| 🚧 Planned| `elasticsearch`| Query and aggregation support (future)     |
 | MongoDB      | 🚧 Planned| `mongodb`      | Basic CRUD and aggregation pipelines       |
 | Neo4j        | 🚧 Planned| `neo4j`        | Cypher query support (future)              |
@@ -80,6 +81,78 @@ print(rows)
 
 pg.close()
 ```
+
+### Azure Monitor Logs and Microsoft Sentinel
+
+Install `agent-data-toolkit[azure-monitor]` in the environment that executes the
+queries. For Jupyter, that is the **kernel environment**, which may be remote.
+The connector uses Azure Monitor's Logs query API for the workspace's tables;
+it does not manage Sentinel incidents, rules or workspace permissions.
+
+For local development, authenticate with Azure CLI and configure the kernel:
+
+```sh
+az login
+export AZURE_LOGS_WORKSPACE_ID="<workspace-guid>"
+export AZURE_LOGS_AUTH=azure-cli
+```
+
+For an Azure-hosted workload, set `AZURE_LOGS_AUTH=managed-identity` and optionally
+`AZURE_CLIENT_ID` for its explicitly selected user-assigned identity. There is no
+automatic developer-credential fallback. The runtime identity needs query access
+to the intended workspace/tables. An injected synchronous Azure `TokenCredential`
+is also supported through `from_env(credential=...)` or `from_info(info, credential)`.
+
+```python
+from datetime import UTC, datetime
+from agent_data_toolkit.azure_monitor import AzureMonitorLogsClient
+
+logs = AzureMonitorLogsClient.from_env()
+result = logs.query(
+    "SecurityEvent | take 100",
+    timespan=(
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 1, 2, tzinfo=UTC),
+    ),
+    max_rows=1000,
+)
+print(result.metadata())
+events = result.to_dataframe()
+# Keep logs and events in the notebook kernel for follow-up cells.
+# Close the reusable client when finished:
+logs.close()
+```
+
+`query()` retains every result table's names/types, the query/window, source
+partial status, request ID and exact response bytes (`raw_response`) when received
+through the SDK pipeline. `metadata()` exposes their hashes without rows or tokens.
+An empty successful table retains its columns. `to_dataframe()` and `query_df()`
+reject partial or client-truncated data by default; explicitly use
+`allow_partial=True` after inspecting the result. A `PartialResultError` retains
+its structured `result` for inspection without repeating the query.
+
+`max_rows` caps retained rows across all tables **after the response arrives**.
+It does not cap server scanning, network bytes or the retained native response.
+Service limits, query design and `server_timeout` (1–600 seconds) remain separate
+limits. `complete` describes successful API collection without client truncation;
+it does not establish ingestion health or investigation coverage.
+
+The SDK caches/renews tokens while the client is reused. No raw token is accepted
+or written into notebook cells. Caller-injected credentials remain caller-owned;
+`close()` releases SDK resources and credentials created by `from_env()`.
+Cloud overrides use trusted `AZURE_LOGS_ENDPOINT` and `AZURE_LOGS_AUDIENCE` settings.
+Any Python running in a kernel with an Azure identity can use that identity:
+notebook tool arguments alone are not an authorization boundary.
+
+Offline connector tests, including a controlled Azure SDK transport, need no
+source identity. Live qualification is explicit:
+
+```sh
+ADT_AZURE_LIVE=1 pytest -q -m azure_live
+```
+
+This live probe verifies authentication and workspace query permission; it does
+not qualify a particular security table, mapping or MATCH investigation outcome.
 
 ---
 

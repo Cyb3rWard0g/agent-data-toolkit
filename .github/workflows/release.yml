@@ -70,10 +70,20 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package with dev + postgresql extras
-        run: uv pip install --system -e ".[dev,postgresql]"
+        run: uv pip install --system -e ".[dev,postgresql,azure-monitor]"
 
       - name: Run unit tests
         run: pytest -q -m "not pg"
+
+      - name: Build and verify installed Azure Monitor wheel
+        run: |
+          python -m build --wheel
+          python -m venv "$RUNNER_TEMP/azure-wheel"
+          for wheel in dist/*.whl; do
+            uv pip install --python "$RUNNER_TEMP/azure-wheel/bin/python" "$wheel[azure-monitor]" pytest
+          done
+          "$RUNNER_TEMP/azure-wheel/bin/python" -m pytest \
+            tests/azure_monitor/integration/test_transport.py -q -o pythonpath= --import-mode=importlib
 
   # ── Publish to PyPI ──────────────────────────────────
   publish:
