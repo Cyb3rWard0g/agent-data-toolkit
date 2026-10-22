@@ -15,7 +15,6 @@ from azure.monitor.query import LogsQueryClient
 from agent_data_toolkit.azure_monitor import (
     AzureMonitorLogsClient,
     ConnectionInfo,
-    ConnectionManager,
     LogsQueryError,
 )
 
@@ -85,26 +84,13 @@ class Transport(HttpTransport):
 @pytest.mark.parametrize("query", ["success", "partial"])
 @pytest.mark.parametrize("lifetime,expected_token_requests", [(3600, 1), (1, 2)])
 def test_sdk_transport_retains_native_response_and_reuses_client(
-    monkeypatch, query, lifetime, expected_token_requests
+    query, lifetime, expected_token_requests
 ):
-    from agent_data_toolkit.azure_monitor import connection
-
     info = ConnectionInfo("22222222-2222-4222-8222-222222222222")
     credential = Credential(lifetime)
     transport = Transport()
-    monkeypatch.setattr(
-        connection,
-        "_make_client",
-        lambda credential, info: LogsQueryClient(
-            credential,
-            endpoint=info.endpoint,
-            audience=info.audience,
-            transport=transport,
-            retry_total=0,
-        ),
-    )
     window = (datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC))
-    with AzureMonitorLogsClient(ConnectionManager(info, credential)) as client:
+    with AzureMonitorLogsClient.from_info(info, credential, transport=transport) as client:
         first = client.query(query, timespan=window)
         second = client.query(query, timespan=window)
     assert first.raw_response == transport.responses[0].body()
@@ -117,6 +103,39 @@ def test_sdk_transport_retains_native_response_and_reuses_client(
     request = transport.requests[0]
     assert request.url.startswith(f"{info.endpoint}/v1/workspaces/{info.workspace_id}/query")
     assert json.loads(request.body)["query"] == query
+
+
+def test_explicit_no_timespan_preserves_compiled_query_request():
+    info = ConnectionInfo("22222222-2222-4222-8222-222222222222")
+    transport = Transport()
+    with AzureMonitorLogsClient.from_info(info, Credential(3600), transport=transport) as client:
+        result = client.query("SecurityEvent | take 1", timespan=None)
+    request = json.loads(transport.requests[0].body)
+    assert request["timespan"] is None and request["workspaces"] is None
+    assert {key: value for key, value in request.items() if value is not None} == {
+        "query": "SecurityEvent | take 1"
+    }
+    assert result.start_time is None and result.end_time is None
+    assert result.metadata()["start_time"] is None
+    assert result.metadata()["end_time"] is None
+    assert len(transport.requests) == 1
+
+
+def test_sdk_failure_does_not_redispatch_source_request():
+    class Unavailable(Transport):
+        def send(self, request, **kwargs):
+            response = super().send(request, **kwargs)
+            response.status_code = 503
+            response.headers["retry-after"] = "0"
+            response.value = b'{"error":{"code":"Unavailable","message":"Controlled"}}'
+            return response
+
+    info = ConnectionInfo("22222222-2222-4222-8222-222222222222")
+    transport = Unavailable()
+    with AzureMonitorLogsClient.from_info(info, Credential(3600), transport=transport) as client:
+        with pytest.raises(LogsQueryError):
+            client.query("SecurityEvent | take 1", timespan=None)
+    assert len(transport.requests) == 1
 
 
 @pytest.mark.parametrize(

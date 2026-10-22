@@ -24,19 +24,31 @@ class AzureMonitorLogsClient:
         return cls(ConnectionManager.from_env(credential=credential))
 
     @classmethod
-    def from_info(cls, info: ConnectionInfo, credential: Any) -> AzureMonitorLogsClient:
-        """Use an explicit workspace and caller-owned TokenCredential."""
-        return cls(ConnectionManager(info, credential))
+    def from_info(
+        cls, info: ConnectionInfo, credential: Any, *, transport: Any = None
+    ) -> AzureMonitorLogsClient:
+        """Use an explicit workspace, caller-owned credential and optional SDK HttpTransport.
+
+        Transport is trusted Python configuration, not a query argument. The SDK
+        client owns its transport lifetime; closing this client closes it. A
+        capture transport can mediate requests without exposing a source token.
+        """
+        return cls(ConnectionManager(info, credential, transport=transport))
 
     def query(
         self,
         query: str,
         *,
-        timespan: tuple[datetime, datetime],
+        timespan: tuple[datetime, datetime] | None,
         max_rows: int = 100_000,
         server_timeout: int = 120,
     ) -> QueryResult:
-        """Execute a query once and return structured tables/status, including partial data."""
+        """Execute once with an absolute API time filter or explicit None.
+
+        None sends no additional API time filter. Use it when the query text
+        already owns its occurrence-time predicates. Result time-filter metadata
+        is then null; it does not claim an independently verified query window.
+        """
         return query_logs(
             self._manager,
             query,
@@ -49,7 +61,7 @@ class AzureMonitorLogsClient:
         self,
         query: str,
         *,
-        timespan: tuple[datetime, datetime],
+        timespan: tuple[datetime, datetime] | None,
         table: int = 0,
         allow_partial: bool = False,
         max_rows: int = 100_000,

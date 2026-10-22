@@ -137,6 +137,14 @@ Service limits, query design and `server_timeout` (1–600 seconds) remain separ
 limits. `complete` describes successful API collection without client truncation;
 it does not establish ingestion health or investigation coverage.
 
+Trusted Python hosts may pass an Azure SDK `HttpTransport` to
+`AzureMonitorLogsClient.from_info(info, credential, transport=...)`. The SDK
+client owns that transport's lifetime and disables automatic request retries;
+a capture host can mediate one request without giving the kernel an Azure token.
+`timespan=None` explicitly adds no API time filter, for a compiled query that
+already owns its occurrence-time predicates. Its metadata window is then null;
+an absolute UTC tuple keeps the existing additional API time filter.
+
 The SDK caches/renews tokens while the client is reused. No raw token is accepted
 or written into notebook cells. Caller-injected credentials remain caller-owned;
 `close()` releases SDK resources and credentials created by `from_env()`.
