@@ -38,12 +38,16 @@ class ConnectionInfo:
                 raise ValueError(f"{name} must be an HTTPS origin")
 
 
-def _make_client(credential: Any, info: ConnectionInfo) -> Any:
+def _make_client(credential: Any, info: ConnectionInfo, *, transport: Any = None) -> Any:
     try:
         from azure.monitor.query import LogsQueryClient
     except ImportError as exc:
         raise RuntimeError("Install agent-data-toolkit[azure-monitor]") from exc
-    return LogsQueryClient(credential, endpoint=info.endpoint, audience=info.audience)
+    options = {"transport": transport} if transport is not None else {}
+    # A failed/uncertain collection must not silently dispatch another query.
+    return LogsQueryClient(
+        credential, endpoint=info.endpoint, audience=info.audience, retry_total=0, **options
+    )
 
 
 def _environment_credential(auth: str, client_id: str | None) -> Any:
@@ -71,12 +75,20 @@ class ConnectionManager:
     a raw token string, silently falls back between identities, or persists tokens.
     """
 
-    def __init__(self, info: ConnectionInfo, credential: Any, *, owns_credential: bool = False):
+    def __init__(
+        self,
+        info: ConnectionInfo,
+        credential: Any,
+        *,
+        owns_credential: bool = False,
+        transport: Any = None,
+    ):
         if not callable(getattr(credential, "get_token", None)):
             raise TypeError("credential must implement the synchronous TokenCredential protocol")
         self.info = info
         self._credential = credential
         self._owns_credential = owns_credential
+        self._transport = transport
         self._client: Any = None
         self._closed = False
 
@@ -105,7 +117,11 @@ class ConnectionManager:
         if self._closed:
             raise RuntimeError("Azure Monitor Logs client is closed")
         if self._client is None:
-            self._client = _make_client(self._credential, self.info)
+            self._client = (
+                _make_client(self._credential, self.info, transport=self._transport)
+                if self._transport is not None
+                else _make_client(self._credential, self.info)
+            )
         return self._client
 
     def close(self) -> None:

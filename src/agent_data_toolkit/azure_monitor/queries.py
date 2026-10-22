@@ -46,8 +46,8 @@ class QueryResult:
     tables: tuple[LogsTable, ...]
     workspace_id: str
     query: str
-    start_time: datetime
-    end_time: datetime
+    start_time: datetime | None
+    end_time: datetime | None
     truncated: bool
     max_rows: int
     error_code: str | None = None
@@ -71,8 +71,8 @@ class QueryResult:
             "raw_response_sha256": (
                 sha256(self.raw_response).hexdigest() if self.raw_response is not None else None
             ),
-            "start_time": self.start_time.isoformat(),
-            "end_time": self.end_time.isoformat(),
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
             "truncated": self.truncated,
             "max_rows": self.max_rows,
             "error_code": self.error_code,
@@ -110,18 +110,18 @@ class QueryResult:
 
 
 def validate_query(
-    query: str, timespan: tuple[datetime, datetime], max_rows: int, server_timeout: int
-) -> tuple[datetime, datetime]:
+    query: str, timespan: tuple[datetime, datetime] | None, max_rows: int, server_timeout: int
+) -> tuple[datetime | None, datetime | None]:
     """Validate before credentials are used or any network request is sent."""
     if not isinstance(query, str) or not query.strip() or len(query) > 65_536:
         raise ValueError("query must contain 1 to 65536 characters")
-    if not isinstance(timespan, tuple) or len(timespan) != 2:
+    if timespan is not None and (not isinstance(timespan, tuple) or len(timespan) != 2):
         raise ValueError("timespan must be an absolute (start, end) datetime tuple")
-    for value in timespan:
+    for value in timespan or ():
         if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("timespan requires timezone-aware datetimes")
-    start, end = (value.astimezone(UTC) for value in timespan)
-    if start >= end:
+    start, end = tuple(value.astimezone(UTC) for value in timespan) if timespan else (None, None)
+    if start is not None and end is not None and start >= end:
         raise ValueError("timespan start must precede end")
     for name, value, upper in (
         ("max_rows", max_rows, 1_000_000),
@@ -177,7 +177,7 @@ def query_logs(
     manager: ConnectionManager,
     query: str,
     *,
-    timespan: tuple[datetime, datetime],
+    timespan: tuple[datetime, datetime] | None,
     max_rows: int = 100_000,
     server_timeout: int = 120,
 ) -> QueryResult:
@@ -200,7 +200,7 @@ def query_logs(
         response = client.query_workspace(
             manager.info.workspace_id,
             query,
-            timespan=(start, end),
+            timespan=(start, end) if timespan is not None else None,
             server_timeout=server_timeout,
             raw_response_hook=capture_response,
         )

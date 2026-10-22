@@ -72,6 +72,13 @@ def test_query_once_preserves_schema_window_and_client(fixture):
     assert fixture.sdk.query_workspace.call_count == 2
 
 
+def test_explicit_none_disables_api_time_filter_without_claiming_a_window(fixture):
+    result = fixture.client.query("SecurityEvent", timespan=None)
+    assert fixture.sdk.query_workspace.call_args.kwargs["timespan"] is None
+    assert result.metadata()["start_time"] is None
+    assert result.metadata()["end_time"] is None
+
+
 @pytest.mark.parametrize("rows", [[], [["host-1", 2]]])
 def test_partial_results_retained_but_dataframe_requires_opt_in(fixture, rows):
     fixture.sdk.query_workspace.return_value = response(rows=rows, status="PartialError")
